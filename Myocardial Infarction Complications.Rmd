@@ -1,0 +1,125 @@
+---
+title: "Myocardial Infarction Complications"
+author: "Lennox Garay"
+date: "2023-11-04"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(glmnet)
+library(zoo)
+library(naniar)
+library(FactoMineR)
+library(psych)
+library(reshape2)
+```
+
+
+
+```{r}
+data = read.csv("Myocardial.csv")
+attach(data)
+
+
+data = data %>% mutate_if(is.numeric, na.aggregate, FUN = median) %>% 
+  mutate_if(is.integer, na.aggregate, FUN = median) %>% 
+  mutate_if(is.double, na.aggregate, FUN = median)
+
+```
+
+
+```{r}
+cause_death = data.frame(deaths = data$LET_IS[which(data$LET_IS > 0)]) ## 16% of the patients with MI have died. 
+
+ggplot(data = cause_death, aes(x=factor(deaths), fill = deaths)) + geom_bar(stat = 'count') + xlab('Cause of Death') + ylab('Count') +
+  scale_x_discrete(name='Cause of Death', labels=c("0" = "Alive", '1'= 'Cardiogenic Shock', "2" = "Pulmonary Edema", "3" = "Myocardial Rupture", "4" = "Heart Failure", "5"="Thromboembolism", "6"="Asystole", "7"="V-Fib")) + theme(text = element_text(size=12), axis.text.x = element_text(angle=90, hjust = .5, vjust = .5))
+
+
+response = data[,113:124]
+
+ggplot(data = data, aes(x = AGE)) + geom_histogram(stat = 'count', color = 'red', fill = 'darkred') + ggtitle(label = 'Distribution of Age in MI Patients (Fig 1.)')
+
+ggplot(data = data, aes(x = factor(ZSN), y = AGE)) + 
+  geom_boxplot(fill='blue') + 
+  ggtitle(label = 'Boxplot of Chronic Heart Failure vs Patient age (Fig 2.)') + 
+  scale_x_discrete(name='Patient Chronic Heart Failure', labels=c("0" = "No", '1'= 'Yes')) 
+
+ggplot(data = data, aes(x = factor(OTEK_LANC), y = AGE)) +
+  geom_boxplot(fill='purple')  + 
+  ggtitle(label = 'Boxplot of Pulmonary Edema vs Patient age (Fig 2.1)') + 
+  scale_x_discrete(name='Patient Pulmonary Edema', labels=c("0" = "No", '1'= 'Yes')) 
+
+ggplot(data = data, aes(x = factor(REC_IM), y = AGE)) +
+  geom_boxplot(fill='cornflowerblue')  + 
+  ggtitle(label = 'Boxplot of Patient Relapse of MI vs Patient age (Fig 2.2)') + 
+  scale_x_discrete(name='Patient MI Relapse', labels=c("0" = "No", '1'= 'Yes')) 
+
+
+EDEMA_VS_MI_RELAPSE = matrix(c(OTEK_LANC, REC_IM), ncol = 2) 
+tetrachoric(EDEMA_VS_MI_RELAPSE)
+
+FAILURE_VS_RELAPSE = matrix(c(ZSN, REC_IM), ncol = 2)
+tetrachoric(FAILURE_VS_RELAPSE)
+
+
+
+```
+
+```{r}
+x = data[,2:112]
+y = data[,'ZSN']
+
+
+cv_model = cv.glmnet(as.matrix(x),y, alpha=1) ## 10-fold cross validation 
+
+best_lambda = cv_model$lambda.min ## 0.01339178
+plot(cv_model)
+
+## LASSO 
+
+lasso_model = glmnet(x,y, alpha=1, lambda = best_lambda) ##alpha=1 is LASSO 
+
+coef(lasso_model) 
+```
+
+
+```{r}
+x = data[,2:112]
+y = data[,'REC_IM']
+
+
+cv_model = cv.glmnet(as.matrix(x),y, alpha=1) ## 10-fold cross validation 
+
+best_lambda = cv_model$lambda.min ## 0.01339178
+plot(cv_model)
+
+## LASSO 
+
+lasso_model = glmnet(x,y, alpha=1, lambda = best_lambda) ##alpha=1 is LASSO 
+
+coef(lasso_model)
+```
+
+
+```{r}
+
+#x, response 
+
+newd = cor(x[sapply(x,is.numeric)])
+
+melted = melt(newd)
+
+ggplot(melted, aes(x = Var1, y = Var2, fill = value)) + geom_tile() + scale_fill_gradient(high = "red", low = "blue")+
+  labs(title = "Correlation Heatmap of Covariates") + 
+  theme(text = element_text(size=4), axis.text.x = element_text(angle=90, hjust = .5, vjust = .5))
+```
+
+
+
